@@ -19,36 +19,26 @@ RUN	--mount=type=bind,from=pkg,source=/deb,target=/deb <<"HEREDOC"
 	apt-get -qq update
 	apt-get -qq install ${RSPAMD_DEPS}
 
-	## Reproducible build support
-	# 1. Remove disposable content:
+	# Reproducible build support - Remove disposable content
 	apt-get -qq clean
 	rm -rf \
 		/var/cache/ldconfig/aux-cache \
 		/var/lib/apt/lists/* \
 		/var/log/apt/*.log \
 		/var/log/dpkg.log
-
-	# 2. Adjust mtime of any files modified/updated by this layer:
-	find / -mount -newer /proc/1 -not -path '/dev/**' -not -path '/proc/**' -not -path '/sys/**' | xargs touch -h -d '2000-01-01 00:00:00'
 HEREDOC
 
-RUN	\
-	--mount=type=bind,from=pkg,source=/deb,target=/deb \
-	--mount=type=bind,target=/build-context \
-	<<HEREDOC
+RUN	--mount=type=bind,from=pkg,source=/deb,target=/deb <<HEREDOC
 	dpkg --install /deb/rspamd${ASAN_TAG}_*_*.deb /deb/rspamd${ASAN_TAG}-dbg_*_*.deb
 	rm -rf /var/log/dpkg.log
 
-	cp /build-context/lid.176.ftz /usr/share/rspamd/languages/fasttext_model.ftz
-
 	# Reproducible build support:
-	# 1. Normalize the password expiry for this system user to `0` (unix epoch date) in `/etc/shadow`:
-	#    (repeated to also normalize the backup `/etc/shadow-`)
-	passwd --expire _rspamd && passwd --expire _rspamd
-
-	# 2. Adjust mtime of any files modified/updated by this layer:
-	find / -mount -newer /proc/1 -not -path '/dev/**' -not -path '/proc/**' -not -path '/sys/**' | xargs touch -h -d '2000-01-01 00:00:00'
+	# Unset the password change date to normalize the `_rspamd` entry in `/etc/shadow`.
+	# Afterwards remove backup and related account backup files caused by the package install.
+	chage --lastday -1
+	rm /etc/passwd- /etc/group- /etc/gshadow- /etc/shadow-
 HEREDOC
+COPY ./lid.176.ftz /usr/share/rspamd/languages/fasttext_model.ftz
 
 USER	11333:11333
 VOLUME  [ "/var/lib/rspamd" ]

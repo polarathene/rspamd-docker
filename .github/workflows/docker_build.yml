@@ -79,6 +79,10 @@ jobs:
       - name: Build pkg image
         id: build_pkg
         uses: docker/build-push-action@v5
+        env:
+          # Reproducible build support - BuildKit will normalize the mainfest to the linux epoch timestamp:
+          # https://github.com/moby/buildkit/blob/master/docs/build-repro.md#source_date_epoch
+          SOURCE_DATE_EPOCH: 0
         with:
           build-args: |
             RSPAMD_GIT=${{ env.RSPAMD_GIT }}
@@ -86,10 +90,15 @@ jobs:
           file: Dockerfile.pkg
           push: true
           tags: ghcr.io/${{ github.repository }}:pkg${{ env.PKG_TAG_SUFFIX }}
+          # `rewrite-timestamp=true` will ensure the timestamp of content from image layers (not upstream base)
+          # are rewritten to the timestamp of `env.SOURCE_DATE_EPOCH`:
+          outputs: "type=image,rewrite-timestamp=true"
 
       - name: Build release image
         id: build_release
         uses: docker/build-push-action@v5
+        env:
+          SOURCE_DATE_EPOCH: 0
         with:
           build-args: |
             PKG_IMG=ghcr.io/${{ github.repository }}
@@ -99,11 +108,13 @@ jobs:
           file: Dockerfile
           push: true
           tags: ""
-          outputs: "type=image,name=ghcr.io/${{ github.repository }},push-by-digest=true"
+          outputs: "type=image,name=ghcr.io/${{ github.repository }},push-by-digest=true,rewrite-timestamp=true"
 
       - name: Build ASAN image
         id: build_asan
         uses: docker/build-push-action@v5
+        env:
+          SOURCE_DATE_EPOCH: 0
         with:
           build-args: |
             ASAN_TAG=-asan
@@ -114,4 +125,4 @@ jobs:
           file: Dockerfile
           push: true
           tags: ""
-          outputs: "type=image,name=ghcr.io/${{ github.repository }},push-by-digest=true"
+          outputs: "type=image,name=ghcr.io/${{ github.repository }},push-by-digest=true,rewrite-timestamp=true"

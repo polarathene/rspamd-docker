@@ -2,18 +2,20 @@
 
 ARG DEBIAN_RELEASE=bookworm
 FROM ghcr.io/rspamd/rspamd-build-docker:debian-${DEBIAN_RELEASE} AS build
-SHELL ["/bin/bash", "-eux", "-o", "pipefail", "-c"]
+SHELL ["/bin/bash", "-ex", "-o", "pipefail", "-c"]
+
 RUN DEBIAN_FRONTEND=noninteractive \
 	apt-get -qq update && apt-get -qq install libfasttext-dev
 
+ARG RSPAMD_GIT_REPO=https://github.com/rspamd/rspamd.git
 ARG RSPAMD_GIT=master
 ARG RSPAMD_VERSION=auto
 
 USER nobody
 WORKDIR /build/src
 
-RUN	--mount=type=bind,source=patches/,target=/patches <<"HEREDOC"
-	git clone -b ${RSPAMD_GIT} https://github.com/rspamd/rspamd.git .
+ADD --keep-git-dir=true --chown=nobody:nobody ${RSPAMD_GIT_REPO}#${RSPAMD_GIT?git-ref-required} .
+RUN --mount=type=bind,source=patches/,target=/patches <<"HEREDOC"
 	git apply /patches/*.diff
 
 	# Update version for packaging:
@@ -28,15 +30,11 @@ RUN	--mount=type=bind,source=patches/,target=/patches <<"HEREDOC"
 	fi
 	sed -i s/quilt/native/ debian/source/format
 
-	# Build Rspamd from source and generate `.deb` packages ():
+	# Build Rspamd from source and generate `.deb` packages (placed in the parent directory of the source):
 	# NOTE: `debuild` strips down the environment:
 	# https://manpages.debian.org/trixie/devscripts/debuild.1.en.html#ENVIRONMENT_VARIABLES
 	debuild --unsigned-source --unsigned-changes
-	mkdir /build/packages && mv /build/*.deb /build/packages/
-
-	# Reproducible build support - Ensure mtime of folder and packages is deterministic:
-	touch -h -d '2000-01-01 00:00:00' /build/packages/ /build/packages/*
 HEREDOC
 
 FROM scratch AS pkg
-COPY --from=build /build/packages /deb
+COPY --from=build /build/*.deb /deb
