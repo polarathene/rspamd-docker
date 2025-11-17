@@ -6,36 +6,34 @@ ARG PKG_TAG=pkg-latest
 
 FROM ${PKG_IMG}:${PKG_TAG} AS pkg
 
-FROM scratch AS lid
-COPY lid.176.ftz /
-
 FROM debian:${DEBIAN_RELEASE}-slim AS install
 SHELL ["/bin/bash", "-eux", "-o", "pipefail", "-c"]
 ARG ASAN_TAG
 
 RUN	--mount=type=bind,from=pkg,source=/deb,target=/deb <<HEREDOC
-	apt-get update
-	apt-get install -y `bash -c "dpkg -I /deb/rspamd${ASAN_TAG}_*_*.deb | grep '^ Depends:' | perl -p -e 's#Depends: |,|\||\([^)]*\)##g'"`
+	apt-get -qq update
+	apt-get -qq install `bash -c "dpkg --info /deb/rspamd${ASAN_TAG}_*_*.deb | grep '^ Depends:' | perl -p -e 's#Depends: |,|\||\([^)]*\)##g'"`
 	apt-get -q clean
 	rm -rf /var/cache/ldconfig/aux-cache /var/lib/apt/lists/* /var/log/apt/*.log /var/log/dpkg.log
+
 	find / -mount -newer /proc/1 -not -path '/dev/**' -not -path '/proc/**' -not -path '/sys/**' | xargs touch -h -d '2000-01-01 00:00:00'
 HEREDOC
 
 RUN	\
 	--mount=type=bind,from=pkg,source=/deb,target=/deb \
-	--mount=type=bind,from=lid,source=/,target=/lid \
+	--mount=type=bind,target=/build-context \
 	<<HEREDOC
-	dpkg -i /deb/rspamd${ASAN_TAG}_*_*.deb /deb/rspamd${ASAN_TAG}-dbg_*_*.deb
+	dpkg --install /deb/rspamd${ASAN_TAG}_*_*.deb /deb/rspamd${ASAN_TAG}-dbg_*_*.deb
 	rm -rf /var/log/dpkg.log
-	cp /lid/lid.176.ftz /usr/share/rspamd/languages/fasttext_model.ftz
+
+	cp /build-context/lid.176.ftz /usr/share/rspamd/languages/fasttext_model.ftz
 	passwd --expire _rspamd && passwd --expire _rspamd
+
 	find / -mount -newer /proc/1 -not -path '/dev/**' -not -path '/proc/**' -not -path '/sys/**' | xargs touch -h -d '2000-01-01 00:00:00'
 HEREDOC
 
 USER	11333:11333
-
 VOLUME  [ "/var/lib/rspamd" ]
-
 CMD     [ "/usr/bin/rspamd", "-f" ]
 
 # https://www.rspamd.com/doc/workers
