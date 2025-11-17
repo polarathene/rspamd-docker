@@ -1,3 +1,5 @@
+# syntax=docker.io/docker/dockerfile:1
+
 ARG DEBIAN_RELEASE=bookworm
 ARG PKG_IMG=ghcr.io/rspamd/rspamd-docker
 ARG PKG_TAG=pkg-latest
@@ -8,9 +10,7 @@ FROM scratch AS lid
 COPY lid.176.ftz /
 
 FROM debian:${DEBIAN_RELEASE}-slim AS install
-
 ARG ASAN_TAG
-ENV ASAN_TAG=$ASAN_TAG
 
 RUN	--mount=type=cache,from=pkg,source=/deb,target=/deb \
 	apt-get update \

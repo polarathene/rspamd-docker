@@ -1,19 +1,13 @@
-ARG ASAN_TAG
+# syntax=docker.io/docker/dockerfile:1
+
 ARG DEBIAN_RELEASE=bookworm
-ARG RSPAMD_GIT
-ARG RSPAMD_VERSION
-ARG TARGETARCH
-
 FROM ghcr.io/rspamd/rspamd-build-docker:debian-${DEBIAN_RELEASE} AS build
-
 RUN mkdir /build /deb && chown nobody:nogroup /build /deb \
 	&& apt-get update \
 	&& apt-get install -y libfasttext-dev
 
-ARG RSPAMD_GIT
-ARG RSPAMD_VERSION
-ENV RSPAMD_GIT=$RSPAMD_GIT
-ENV RSPAMD_VERSION=$RSPAMD_VERSION
+ARG RSPAMD_GIT=master
+ARG RSPAMD_VERSION=auto
 
 USER nobody
 WORKDIR /build
