@@ -9,12 +9,12 @@ ARG PKG_TAG=pkg-latest
 FROM ${PKG_IMG}:${PKG_TAG} AS pkg
 
 FROM debian:${DEBIAN_RELEASE}-slim AS install
-SHELL ["/bin/bash", "-eux", "-o", "pipefail", "-c"]
+SHELL ["/bin/bash", "-ex", "-o", "pipefail", "-c"]
 ARG ASAN_TAG
 
-RUN	--mount=type=bind,from=pkg,source=/deb,target=/deb <<"HEREDOC"
+RUN --mount=type=bind,from=pkg,source=/deb,target=/deb <<"HEREDOC"
 	# Extract a list of dependencies from the rspamd packages for this layer to cache:
-	RSPAMD_DEPS=$(dpkg --info /deb/rspamd${ASAN_TAG}_*_*.deb | grep '^ Depends:' | perl -p -e 's#Depends: |,|\||\([^)]*\)##g')
+	RSPAMD_DEPS=$(dpkg-deb --field /deb/rspamd${ASAN_TAG}_*_*.deb Depends | perl -pe 's#\([^)]*\)|,|\|##g')
 
 	apt-get -qq update
 	apt-get -qq install ${RSPAMD_DEPS}
@@ -28,14 +28,14 @@ RUN	--mount=type=bind,from=pkg,source=/deb,target=/deb <<"HEREDOC"
 		/var/log/dpkg.log
 HEREDOC
 
-RUN	--mount=type=bind,from=pkg,source=/deb,target=/deb <<HEREDOC
+RUN --mount=type=bind,from=pkg,source=/deb,target=/deb <<HEREDOC
 	dpkg --install /deb/rspamd${ASAN_TAG}_*_*.deb /deb/rspamd${ASAN_TAG}-dbg_*_*.deb
 	rm -rf /var/log/dpkg.log
 
 	# Reproducible build support:
 	# Unset the password change date to normalize the `_rspamd` entry in `/etc/shadow`.
 	# Afterwards remove backup and related account backup files caused by the package install.
-	chage --lastday -1
+	chage --lastday -1 _rspamd
 	rm /etc/passwd- /etc/group- /etc/gshadow- /etc/shadow-
 HEREDOC
 COPY ./lid.176.ftz /usr/share/rspamd/languages/fasttext_model.ftz

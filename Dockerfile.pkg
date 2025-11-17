@@ -37,4 +37,4 @@ RUN --mount=type=bind,source=patches/,target=/patches <<"HEREDOC"
 HEREDOC
 
 FROM scratch AS pkg
-COPY --from=build /build/*.deb /deb
+COPY --from=build /build/*.deb /deb/
