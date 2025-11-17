@@ -13,7 +13,7 @@ FROM debian:${DEBIAN_RELEASE}-slim AS install
 SHELL ["/bin/bash", "-eux", "-o", "pipefail", "-c"]
 ARG ASAN_TAG
 
-RUN	--mount=type=cache,from=pkg,source=/deb,target=/deb <<HEREDOC
+RUN	--mount=type=bind,from=pkg,source=/deb,target=/deb <<HEREDOC
 	apt-get update
 	apt-get install -y `bash -c "dpkg -I /deb/rspamd${ASAN_TAG}_*_*.deb | grep '^ Depends:' | perl -p -e 's#Depends: |,|\||\([^)]*\)##g'"`
 	apt-get -q clean
@@ -22,8 +22,8 @@ RUN	--mount=type=cache,from=pkg,source=/deb,target=/deb <<HEREDOC
 HEREDOC
 
 RUN	\
-	--mount=type=cache,from=pkg,source=/deb,target=/deb \
-	--mount=type=cache,from=lid,source=/,target=/lid \
+	--mount=type=bind,from=pkg,source=/deb,target=/deb \
+	--mount=type=bind,from=lid,source=/,target=/lid \
 	<<HEREDOC
 	dpkg -i /deb/rspamd${ASAN_TAG}_*_*.deb /deb/rspamd${ASAN_TAG}-dbg_*_*.deb
 	rm -rf /var/log/dpkg.log
