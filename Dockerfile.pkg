@@ -3,11 +3,8 @@
 ARG DEBIAN_RELEASE=bookworm
 FROM ghcr.io/rspamd/rspamd-build-docker:debian-${DEBIAN_RELEASE} AS build
 SHELL ["/bin/bash", "-eux", "-o", "pipefail", "-c"]
-RUN <<HEREDOC
-	mkdir /build /deb && chown nobody:nogroup /build /deb
-	apt-get -qq update
-	apt-get -qq install libfasttext-dev
-HEREDOC
+RUN DEBIAN_FRONTEND=noninteractive \
+	apt-get -qq update && apt-get -qq install libfasttext-dev
 
 ARG RSPAMD_GIT=master
 ARG RSPAMD_VERSION=auto
@@ -15,17 +12,31 @@ ARG RSPAMD_VERSION=auto
 USER nobody
 WORKDIR /build/src
 
-RUN	--mount=type=bind,source=patches/,target=/patches <<HEREDOC
+RUN	--mount=type=bind,source=patches/,target=/patches <<"HEREDOC"
 	git clone -b ${RSPAMD_GIT} https://github.com/rspamd/rspamd.git .
 	git apply /patches/*.diff
 
-	bash -c "if [ ${RSPAMD_VERSION} == 'auto' ]; then sed -i s/\(.*\)/\($((16#`git log -n1 --pretty='%h'`))\)/ debian/changelog; else sed -i s/\(.*\)/\(${RSPAMD_VERSION}\)/ debian/changelog; fi"
+	# Update version for packaging:
+	if [[ ${RSPAMD_VERSION} == 'auto' ]]; then
+		# Uses bash arithmitic to convert the base16 short commit hash to an integer:
+		SHORT_HASH="$(git log -n1 --pretty='%h')"
+		VERSION="$((16#${SHORT_HASH}))"
+
+		sed -i "s/([0-9.]*)/(${VERSION})/" debian/changelog;
+	else
+		sed -i "s/(.*)/(${RSPAMD_VERSION})/" debian/changelog;
+	fi
 	sed -i s/quilt/native/ debian/source/format
 
-	debuild -us -uc
-	mv /build/*.deb /deb/
-	touch -h -d '2000-01-01 00:00:00' /deb/ /deb/*
+	# Build Rspamd from source and generate `.deb` packages ():
+	# NOTE: `debuild` strips down the environment:
+	# https://manpages.debian.org/trixie/devscripts/debuild.1.en.html#ENVIRONMENT_VARIABLES
+	debuild --unsigned-source --unsigned-changes
+	mkdir /build/packages && mv /build/*.deb /build/packages/
+
+	# Reproducible build support - Ensure mtime of folder and packages is deterministic:
+	touch -h -d '2000-01-01 00:00:00' /build/packages/ /build/packages/*
 HEREDOC
 
 FROM scratch AS pkg
-COPY --from=build /deb /deb
+COPY --from=build /build/packages /deb
