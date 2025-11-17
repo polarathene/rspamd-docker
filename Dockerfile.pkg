@@ -2,9 +2,12 @@
 
 ARG DEBIAN_RELEASE=bookworm
 FROM ghcr.io/rspamd/rspamd-build-docker:debian-${DEBIAN_RELEASE} AS build
-RUN mkdir /build /deb && chown nobody:nogroup /build /deb \
-	&& apt-get update \
-	&& apt-get install -y libfasttext-dev
+SHELL ["/bin/bash", "-eux", "-o", "pipefail", "-c"]
+RUN <<HEREDOC
+	mkdir /build /deb && chown nobody:nogroup /build /deb
+	apt-get update
+	apt-get install -y libfasttext-dev
+HEREDOC
 
 ARG RSPAMD_GIT=master
 ARG RSPAMD_VERSION=auto
@@ -13,14 +16,16 @@ USER nobody
 WORKDIR /build
 COPY patches/ /patches/
 
-RUN	git clone -b ${RSPAMD_GIT} https://github.com/rspamd/rspamd.git \
-	&& cd rspamd \
-	&& git apply /patches/*.diff \
-	&& bash -c "if [ ${RSPAMD_VERSION} == 'auto' ]; then sed -i s/\(.*\)/\($((16#`git log -n1 --pretty='%h'`))\)/ debian/changelog; else sed -i s/\(.*\)/\(${RSPAMD_VERSION}\)/ debian/changelog; fi" \
-	&& sed -i s/quilt/native/ debian/source/format \
-	&& debuild -us -uc \
-	&& mv /build/*.deb /deb/ \
-	&& touch -h -d '2000-01-01 00:00:00' /deb/ /deb/*
+RUN	<<HEREDOC
+	git clone -b ${RSPAMD_GIT} https://github.com/rspamd/rspamd.git
+	cd rspamd
+	git apply /patches/*.diff
+	bash -c "if [ ${RSPAMD_VERSION} == 'auto' ]; then sed -i s/\(.*\)/\($((16#`git log -n1 --pretty='%h'`))\)/ debian/changelog; else sed -i s/\(.*\)/\(${RSPAMD_VERSION}\)/ debian/changelog; fi"
+	sed -i s/quilt/native/ debian/source/format
+	debuild -us -uc
+	mv /build/*.deb /deb/
+	touch -h -d '2000-01-01 00:00:00' /deb/ /deb/*
+HEREDOC
 
 FROM scratch AS pkg
 COPY --from=build /deb /deb
